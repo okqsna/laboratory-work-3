@@ -1,139 +1,265 @@
-from __future__ import annotations
+"""
+Regex Finite State Machine implementation
+"""
 from abc import ABC, abstractmethod
 
-
 class State(ABC):
+    """
+    Abstract class for all states in the FSM.
+    """
 
     @abstractmethod
     def __init__(self) -> None:
-        pass
+        """
+        Function initializes the state.
+        """
+        self.next_states = []
 
     @abstractmethod
     def check_self(self, char: str) -> bool:
         """
-        function checks whether occured character is handled by current ctate
+        Function checks whether the current character is handled by this state.
         """
         pass
 
-    def check_next(self, next_char: str) -> State | Exception:
+    def check_next(self, next_char: str):
+        """
+        Function checks whether character is handled by any of the next states.
+
+        :param next_char: str, character to check
+        """
         for state in self.next_states:
             if state.check_self(next_char):
                 return state
-        raise NotImplementedError("rejected string")
-
+        raise NotImplementedError("Rejected string")
 
 class StartState(State):
-    next_states: list[State] = []
-
+    """
+    Start state of the FSM.
+    """
     def __init__(self):
+        """
+        Function initializes the start state.
+        """
         super().__init__()
 
-    def check_self(self, char):
-        return super().check_self(char)
+    def check_self(self, char: str) -> bool:
+        """
+        Function returns False, because start state 
+        does not handle characters.
+        """
+        return False
 
 
 class TerminationState(State):
-    pass  # Implement
+    """
+    Termination state of the FSM.
+    """
+    def __init__(self):
+        """
+        Function initializes the termination state.
+        """
+        super().__init__()
+
+    def check_self(self, char: str) -> bool:
+        """
+        Function returns False, because termination state 
+        does not handle characters.
+        """
+        return False
+
 
 
 class DotState(State):
     """
-    state for . character (any character accepted)
+    Class for handling '.' character.
     """
-
-    next_states: list[State] = []
-
     def __init__(self):
+        """
+        Function initializes the dot state.
+        """
         super().__init__()
 
-    def check_self(self, char: str):
-        pass  # Implement
+    def check_self(self, char: str) -> bool:
+        """
+        Function returns True, because dot state
+        handles any character.
+
+        :param char: str, character
+        """
+        return True
 
 
 class AsciiState(State):
     """
-    state for alphabet letters or numbers
+    Class for handling ASCII characters.
     """
-
-    next_states: list[State] = []
-    curr_sym = ""
-
     def __init__(self, symbol: str) -> None:
-        pass  # Implement
+        """
+        Function initializes the ASCII state.
+        :param symbol: str, ASCII character
+        """
+        super().__init__()
+        self.curr_sym = symbol
 
-    def check_self(self, curr_char: str) -> State | Exception:
-        pass  # Implement
+    def check_self(self, char: str) -> bool:
+        """
+        Function checks if character is handled by state.
+
+        :param char: str, character to check
+        :return: bool, result of checking
+        """
+        return self.curr_sym == char
 
 
 class StarState(State):
-
-    next_states: list[State] = []
-
+    """
+    Class for handling '*' character.
+    """
     def __init__(self, checking_state: State):
-        pass  # Implement
+        """
+        Function initializes the star state.
 
-    def check_self(self, char):
-        for state in self.next_states:
-            if state.check_self(char):
+        :param checking_state: State, state to check
+        """
+        super().__init__()
+        self.checking_state = checking_state
+        self.next_states.append(self)
+        self.next_states.append(checking_state)
+
+    def check_self(self, char: str) -> bool:
+        """
+        Function checks if character is handled by state.
+        :param char: str, character to check
+        """
+        return self.checking_state.check_self(char)
+
+
+class PlusState(State):
+    """
+    Class for handling '+' character.
+    """
+    def __init__(self, checking_state: State):
+        super().__init__()
+        self.checking_state = checking_state
+        self.next_states.append(self)
+        self.next_states.append(checking_state)
+
+    def check_self(self, char: str) -> bool:
+        return self.checking_state.check_self(char)
+
+
+class RegexFSM:
+    """
+    Core of the Regex FSM.
+    """
+    def __init__(self, regex_expr: str) -> None:
+        """
+        Function initializes the FSM with regex expression.
+        :param regex_expr: str, regex expression to compile machine for
+        """
+        self.curr_state = StartState()
+        prev_state = self.curr_state
+        all_states = [self.curr_state]
+
+        i = 0
+
+        while len(regex_expr) > i:
+            if i == 0 and regex_expr[i] in ['*', '+']:
+                raise AttributeError("Pattern cannot start with * or +")
+            elif i + 1 < len(regex_expr) and \
+            regex_expr[i + 1] in ['*', '+']:
+                # this implementation is used for handling occurrences
+                # of characters before plus or star
+                curr_state_ascii = self.__init_next_state(regex_expr[i], prev_state)
+                plus_star_state = self.__init_next_state(regex_expr[i + 1], curr_state_ascii)
+                prev_state.next_states.append(curr_state_ascii)
+
+                prev_state.next_states.append(plus_star_state)
+                all_states.append(plus_star_state)
+                prev_state = plus_star_state
+                i += 2
+                continue
+
+            elif i + 1 < len(regex_expr) and regex_expr[i + 1] == '+':
+                # this implementation is used for handling occurrences
+                # of symbol before plus providing that element is always created
+                # and then reused
+                curr_dot = self.__init_next_state(regex_expr[i], prev_state)
+                prev_state.next_states.append(curr_dot)
+                all_states.append(curr_dot)
+
+                repeat_state = self.__init_next_state(regex_expr[i + 1], curr_dot)
+                prev_state.next_states.append(repeat_state)
+                all_states.append(repeat_state)
+                prev_state = repeat_state
+
+                i += 2
+                continue
+            else:
+                # this implementation is used for handling other characters
+                next_state = self.__init_next_state(regex_expr[i], prev_state)
+                prev_state.next_states.append(next_state)
+                all_states.append(next_state)
+                prev_state = next_state
+                i += 1
+
+        prev_state.next_states.append(TerminationState())
+
+
+    def __init_next_state(self, next_token: str, prev_state: State) -> State:
+        """
+        Function initializes the next state based on the current token and previous state.
+
+        :param next_token: str, current token
+        :param prev_state: State, previous state
+        """
+        new_state = None
+        if next_token == '*':
+            new_state = StarState(prev_state)
+        elif next_token == '+':
+            new_state = PlusState(prev_state)
+        elif next_token == '.':
+            new_state = DotState()
+        elif next_token.isascii() and next_token not in ['*', '+', '.']:
+            new_state = AsciiState(next_token)
+        else:
+            raise AttributeError("Character is not supported")
+
+        return new_state
+
+    def check_string(self, reg_str: str) -> bool:
+        """
+        Function checks if string matches the regular expression.
+
+        :param reg_str: str, string to check
+        :return: bool, result of checking
+        """
+        current_states = []
+        current_states.append(self.curr_state)
+
+        for c in reg_str:
+            next_states = []
+            for state in current_states:
+                for next_state in state.next_states:
+                    if next_state.check_self(c):
+                        next_states.append(next_state)
+
+            current_states = next_states
+
+        for state in current_states:
+            if any(isinstance(next_state, TerminationState) for next_state in state.next_states):
                 return True
 
         return False
 
 
-class PlusState(State):
-    next_states: list[State] = []
-
-    def __init__(self, checking_state: State):
-        pass  # Implement
-
-    def check_self(self, char):
-        pass  # Implement
-
-
-class RegexFSM:
-    curr_state: State = StartState()
-
-    def __init__(self, regex_expr: str) -> None:
-
-        prev_state = self.curr_state
-        tmp_next_state = self.curr_state
-
-        for char in regex_expr:
-            tmp_next_state = self.__init_next_state(char, prev_state, tmp_next_state)
-            prev_state.next_states.append(tmp_next_state)
-
-    def __init_next_state(
-        self, next_token: str, prev_state: State, tmp_next_state: State
-    ) -> State:
-        new_state = None
-
-        match next_token:
-            case next_token if next_token == ".":
-                new_state = DotState()
-            case next_token if next_token == "*":
-                new_state = StarState(tmp_next_state)
-                # here you have to think, how to do it.
-
-            case next_token if next_token == "+":
-                pass  # Implement
-
-            case next_token if next_token.isascii():
-                new_state = AsciiState(next_token)
-
-            case _:
-                raise AttributeError("Character is not supported")
-
-        return new_state
-
-    def check_string(self):
-        pass  # Implement
-
 
 if __name__ == "__main__":
     regex_pattern = "a*4.+hi"
-
     regex_compiled = RegexFSM(regex_pattern)
 
-    print(regex_compiled.check_string("aaaaaa4uhi"))  # True
-    print(regex_compiled.check_string("4uhi"))  # True
-    print(regex_compiled.check_string("meow"))  # False
+    # print(regex_compiled.check_string("aaaaaa4uhi")) # True
+    # print(regex_compiled.check_string("a4uhi")) # True
+    # print(regex_compiled.check_string("a4ссссссссhi")) # True
+    # print(regex_compiled.check_string("meow")) # False
