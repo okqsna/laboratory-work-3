@@ -125,7 +125,6 @@ class StarState(State):
         super().__init__()
         self.checking_state = checking_state
         self.next_states.append(self)
-        self.next_states.append(checking_state)
 
     def check_self(self, char: str) -> bool:
         """
@@ -143,7 +142,6 @@ class PlusState(State):
         super().__init__()
         self.checking_state = checking_state
         self.next_states.append(self)
-        self.next_states.append(checking_state)
 
     def check_self(self, char: str) -> bool:
         return self.checking_state.check_self(char)
@@ -173,7 +171,6 @@ class RegexFSM:
                 # of characters before plus or star
                 curr_state_ascii = self.__init_next_state(regex_expr[i], prev_state)
                 plus_star_state = self.__init_next_state(regex_expr[i + 1], curr_state_ascii)
-                prev_state.next_states.append(curr_state_ascii)
 
                 prev_state.next_states.append(plus_star_state)
                 all_states.append(plus_star_state)
@@ -185,7 +182,7 @@ class RegexFSM:
                 # this implementation is used for handling occurrences
                 # of symbol before plus providing that element is always created
                 # and then reused
-                curr_dot = self.__init_next_state(regex_expr[i], prev_state)
+                curr_dot = DotState()
                 prev_state.next_states.append(curr_dot)
                 all_states.append(curr_dot)
 
@@ -235,15 +232,23 @@ class RegexFSM:
         :param reg_str: str, string to check
         :return: bool, result of checking
         """
-        current_states = []
-        current_states.append(self.curr_state)
+        current_states = [self.curr_state]
 
         for c in reg_str:
             next_states = []
+
             for state in current_states:
                 for next_state in state.next_states:
-                    if next_state.check_self(c):
-                        next_states.append(next_state)
+                    if isinstance(next_state, StarState):
+                        if next_state.check_self(c):
+                            next_states.append(next_state)
+                        else:
+                            for star_state in next_state.next_states:
+                                if star_state.check_self(c):
+                                    next_states.append(star_state)
+                    else:
+                        if next_state.check_self(c):
+                            next_states.append(next_state)
 
             current_states = next_states
 
@@ -261,5 +266,7 @@ if __name__ == "__main__":
 
     # print(regex_compiled.check_string("aaaaaa4uhi")) # True
     # print(regex_compiled.check_string("a4uhi")) # True
+    # print(regex_compiled.check_string("jdjdb4hi")) # False
+    # print(regex_compiled.check_string("4uhi")) # True
     # print(regex_compiled.check_string("a4ссссссссhi")) # True
     # print(regex_compiled.check_string("meow")) # False
